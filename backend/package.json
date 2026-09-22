@@ -1,0 +1,15 @@
+{
+  "name": "memory-manager-backend",
+  "version": "1.0.0",
+  "description": "API REST para el gestor de memoria",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2"
+  }
+}

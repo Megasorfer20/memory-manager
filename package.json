@@ -1,0 +1,19 @@
+{
+  "name": "memory-manager-sim",
+  "version": "1.0.0",
+  "description": "Simulador educativo de gestión de memoria con Node.js y CLI",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/cli.js",
+    "test": "node --test"
+  },
+  "keywords": [
+    "memory",
+    "operating-system",
+    "simulator",
+    "node",
+    "cli"
+  ],
+  "license": "MIT"
+}
