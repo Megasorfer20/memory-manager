@@ -43,6 +43,7 @@ DELETE /processes/:pid
 POST /memory/compact
 POST /processes/:pid/swap
 POST /processes/:pid/swap/restore
+POST /reset
 ```
 
 ## Patrón de respuesta
@@ -57,7 +58,8 @@ Todas las rutas devuelven una respuesta consistente:
     "name": "P1",
     "size": 8,
     "location": "RAM"
-  }
+  },
+  "error": null
 }
 ```
 
@@ -66,9 +68,15 @@ En caso de error:
 ```json
 {
   "success": false,
-  "message": "Existe memoria libre, pero está fragmentada."
+  "data": null,
+  "error": {
+    "code": "ERR_MEMORY_FRAGMENTED",
+    "message": "Memoria insuficiente contigua. Se requiere compactación."
+  }
 }
 ```
+
+Los errores de validación responden HTTP 400, los procesos inexistentes HTTP 404, conflictos de estado o fragmentación HTTP 409, la memoria insuficiente HTTP 422 y los errores inesperados HTTP 500. Las rutas usan un manejador global que registra los errores internos y mantiene el servidor disponible.
 
 ## Flujo de ejemplo
 
@@ -77,6 +85,7 @@ En caso de error:
 3. `POST /processes/1/swap` para moverlo a SWAP
 4. `POST /processes/1/swap/restore` para recuperarlo
 5. `POST /memory/compact` para reorganizar la RAM
+6. `POST /reset` para limpiar la sesión de simulación
 
 ## Validación
 

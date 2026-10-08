@@ -8,12 +8,18 @@ const manager = new MemoryManager(100, 4);
 app.use(cors());
 app.use(express.json());
 
-function sendSuccess(res, payload, status = 200) {
-  res.status(status).json({ success: true, data: payload });
+function sendSuccess(res, data, status = 200) {
+  res.status(status).json({ success: true, data, error: null });
 }
 
-function sendError(res, message, status = 400) {
-  res.status(status).json({ success: false, message });
+function handle(handler) {
+  return (req, res, next) => {
+    try {
+      handler(req, res, next);
+    } catch (error) {
+      next(error);
+    }
+  };
 }
 
 app.get('/health', (req, res) => {
@@ -21,103 +27,92 @@ app.get('/health', (req, res) => {
 });
 
 app.get('/memory', (req, res) => {
-  try {
-    sendSuccess(res, manager.getMemoryStats());
-  } catch (error) {
-    sendError(res, error.message, 500);
-  }
+  sendSuccess(res, manager.getMemoryStats());
 });
 
 app.get('/processes', (req, res) => {
-  try {
-    sendSuccess(res, manager.listProcesses());
-  } catch (error) {
-    sendError(res, error.message, 500);
-  }
+  sendSuccess(res, manager.listProcesses());
 });
 
 app.get('/swap', (req, res) => {
-  try {
-    sendSuccess(res, manager.listSwapProcesses());
-  } catch (error) {
-    sendError(res, error.message, 500);
-  }
+  sendSuccess(res, manager.listSwapProcesses());
 });
 
-app.get('/processes/:pid', (req, res) => {
-  try {
-    const process = manager.getProcessByPid(Number(req.params.pid));
-    if (!process) {
-      throw new Error('El proceso no existe.');
-    }
-    sendSuccess(res, process);
-  } catch (error) {
-    sendError(res, error.message, 404);
+app.get('/processes/:pid', handle((req, res) => {
+  const process = manager.getProcessByPid(req.params.pid);
+  if (!process) {
+    const error = new Error(`El proceso ${req.params.pid} no existe.`);
+    error.code = 'ERR_PROCESS_NOT_FOUND';
+    error.statusCode = 404;
+    throw error;
   }
-});
+  sendSuccess(res, process);
+}));
 
-app.post('/processes', (req, res) => {
-  try {
-    const { name, size } = req.body ?? {};
-    const process = manager.createProcess(name, size);
-    sendSuccess(res, process, 201);
-  } catch (error) {
-    sendError(res, error.message, 400);
-  }
-});
+app.post('/processes', handle((req, res) => {
+  const { name, size } = req.body ?? {};
+  sendSuccess(res, manager.createProcess(name, size), 201);
+}));
 
-app.delete('/processes/:pid', (req, res) => {
-  try {
-    const { pid } = req.params;
-    const result = manager.terminateProcess(Number(pid));
-    sendSuccess(res, result);
-  } catch (error) {
-    sendError(res, error.message, 404);
-  }
-});
+app.delete('/processes/:pid', handle((req, res) => {
+  sendSuccess(res, manager.terminateProcess(req.params.pid));
+}));
 
 app.post('/memory/compact', (req, res) => {
-  try {
-    const result = manager.compactMemory();
-    sendSuccess(res, result);
-  } catch (error) {
-    sendError(res, error.message, 400);
-  }
+  sendSuccess(res, manager.compactMemory());
 });
 
-app.get('/processes/:pid/pages', (req, res) => {
-  try {
-    const { pid } = req.params;
-    const pages = manager.showPages(Number(pid));
-    sendSuccess(res, pages);
-  } catch (error) {
-    sendError(res, error.message, 404);
-  }
+app.get('/processes/:pid/pages', handle((req, res) => {
+  sendSuccess(res, manager.showPages(req.params.pid));
+}));
+
+app.post('/processes/:pid/swap', handle((req, res) => {
+  sendSuccess(res, manager.sendToSwap(req.params.pid));
+}));
+
+app.post('/processes/:pid/swap/restore', handle((req, res) => {
+  sendSuccess(res, manager.restoreFromSwap(req.params.pid));
+}));
+
+app.post('/reset', (req, res) => {
+  sendSuccess(res, manager.reset());
 });
 
-app.post('/processes/:pid/swap', (req, res) => {
-  try {
-    const { pid } = req.params;
-    const result = manager.sendToSwap(Number(pid));
-    sendSuccess(res, result);
-  } catch (error) {
-    sendError(res, error.message, 400);
-  }
-});
-
-app.post('/processes/:pid/swap/restore', (req, res) => {
-  try {
-    const { pid } = req.params;
-    const result = manager.restoreFromSwap(Number(pid));
-    sendSuccess(res, result);
-  } catch (error) {
-    sendError(res, error.message, 400);
-  }
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    data: null,
+    error: { code: 'ERR_ROUTE_NOT_FOUND', message: 'La ruta solicitada no existe.' }
+  });
 });
 
 app.use((error, req, res, next) => {
-  console.error(error);
-  sendError(res, 'Error interno del servidor.', 500);
+  if (res.headersSent) {
+    return next(error);
+  }
+
+  const statusCode = Number.isInteger(error.statusCode)
+    ? error.statusCode
+    : Number.isInteger(error.status) && error.status >= 400 && error.status < 500
+      ? error.status
+      : 500;
+  const isInternal = statusCode >= 500;
+  if (isInternal) {
+    console.error(error);
+  }
+
+  res.status(statusCode).json({
+    success: false,
+    data: null,
+    error: {
+      code: isInternal
+        ? 'ERR_INTERNAL'
+        : typeof error.code === 'string' && error.code.startsWith('ERR_')
+          ? error.code
+          : 'ERR_BAD_REQUEST',
+      message: isInternal ? 'Error interno del servidor.' : error.message || 'Solicitud no válida.'
+    }
+  });
 });
 
 module.exports = app;

@@ -5,7 +5,8 @@
   "main": "src/index.js",
   "type": "commonjs",
   "scripts": {
-    "start": "node src/cli.js",
+    "start": "npm run cli",
+    "cli": "node src/cli.js",
     "test": "node --test"
   },
   "keywords": [
